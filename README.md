@@ -64,12 +64,50 @@ harmonic at a chosen amplitude ratio has a THD that is *exactly* 20·log10(ratio
 response has its −3 dB corner *exactly* at the pole and unity gain *exactly* at `A0·f_p`. The
 tests assert values derived from the mathematics, not values the code produced previously.
 
-## Not a standards claim
+## How much each result claims
 
-IEEE 1241 (ADCs), 1658 (DACs) and 1057 (waveform recorders) are the applicable references. Their
-clause-level requirements have **not** been reviewed against this code, so no result here may be
-labelled as conforming to them. These are Vyges definitions — complete, reproducible, and
-explicit about which they are.
+A number and a standard's name printed near each other read as a conformance claim whether or not
+one was meant. So every result states, in machine-readable form, exactly how much it is claiming:
+
+| level | means |
+| --- | --- |
+| `vyges-definition` | the method is ours, complete and versioned. **No external standard is claimed.** |
+| `candidate` | the application lies inside a named standard's *published scope*, but no clause-level review has been done |
+| `reviewed` | a crosswalk records the exact edition, clauses, choices, deviations, reviewer and artifact |
+| `conformant` | an independently reviewed profile **and** a conformance suite |
+
+`--application generic|adc|dac|recorder` is what decides which standard's scope a result may name
+— the tool cannot infer from a list of numbers what device produced them, and guessing would
+manufacture a standards claim out of nothing. Declaring `adc` reaches `candidate` against
+IEEE 1241-2023, `dac` against 1658-2023, `recorder` against 1057-2017.
+
+```jsonc
+"alignment": {
+  "level": "candidate",
+  "edition": "IEEE 1241-2023",
+  "application": "adc",
+  "statement": "candidate (IEEE 1241-2023) — the application lies within that edition's published
+                scope (…); NO clause-level review has been performed, so this is not a
+                conformance claim"
+}
+```
+
+**The ladder is enforced, not documented.** `reviewed` and `conformant` can only be built from a
+crosswalk, and a crosswalk cannot be constructed without every field of the evidence it stands
+for — the edition, the clauses, the choices, the deviations, the reviewer, the artifact. There is
+no way to write a stronger claim than the evidence supports, because there is no constructor for
+one. **Nothing in this crate is `reviewed` or `conformant`**, and nothing can become so by editing
+a label.
+
+The public scopes of IEEE 1241/1658/1057 are the limit of what is asserted; the normative clauses
+needed for a conformance claim are not public, so `candidate` is the honest ceiling today.
+
+### Not authority
+
+**IEEE 519** governs harmonic control in electric power systems at a point of common coupling. It
+is not an authority for amplifier or converter THD, and a figure from this crate must never be
+cited as 519-anything — a mistake common enough on datasheets that the exclusion is recorded in
+code (`alignment::NOT_AUTHORITY`).
 
 ## License
 

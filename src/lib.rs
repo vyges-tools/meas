@@ -23,7 +23,12 @@
 //! Their clause-level requirements have **not** been reviewed against this code, so nothing here
 //! may be labelled as conforming to them. These are Vyges definitions: complete, reproducible,
 //! and explicit about which they are.
+//!
+//! That is not left to prose. Every result carries an [`alignment`] claim, and the two strongest
+//! rungs of that ladder can only be built from a recorded crosswalk — so a stronger claim than
+//! the evidence supports has no constructor, let alone a default.
 
+pub mod alignment;
 pub mod events;
 pub mod job;
 pub mod spectral;

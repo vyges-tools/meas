@@ -8,6 +8,7 @@
 
 use std::process::exit;
 
+use vyges_meas::alignment::Application;
 use vyges_meas::spectral::{self, Metric, Spec};
 use vyges_meas::transfer::{self, AcMetric};
 use vyges_meas::{events, job};
@@ -40,6 +41,10 @@ flags:
   --metric M            which scalar to measure (required)
   --harmonics LIST      harmonic orders to account for, e.g. 2,3,4,5 (spectral)
   --clip LEVEL          treat |sample| >= LEVEL as clipped and refuse to measure
+  --application WHAT    what the record measures: generic (default) | adc | dac | recorder.
+                        Declaring it is what lets the result name a standard's scope; the tool
+                        cannot infer from a list of numbers what device produced them, and
+                        guessing would manufacture a standards claim out of nothing.
   --target VALUE        pass/fail threshold; SNR/SINAD/SFDR/gain want >= , THD <=
   -o FILE               write the report to FILE (default: stdout)
   --json                machine-readable JSON instead of the text report
@@ -53,13 +58,15 @@ const DESCRIBE: &str = r#"{
   "maturity": "structured",
   "provenance_limitations": [
     "input_hash covers the argument vector, not the content of the series or sweep file it names.",
-    "The measurement describes the record it was given; it cannot tell whether that record was captured coherently, and a non-coherent capture is refused rather than detected."
+    "The measurement describes the record it was given; it cannot tell whether that record was captured coherently, and a non-coherent capture is refused rather than detected.",
+    "The application (adc/dac/recorder) is taken from the caller, not detected: the alignment claim is only as sound as that declaration."
   ],
   "invocation": {
     "args_template": ["spectral", "{series}", "--fundamental-bin", "{fundamental_bin}", "--metric", "{metric}"],
     "optional": [
       { "arg": "harmonics", "flag": "--harmonics" },
       { "arg": "clip", "flag": "--clip" },
+      { "arg": "application", "flag": "--application" },
       { "arg": "target", "flag": "--target" },
       { "arg": "out", "flag": "-o" }
     ],
@@ -74,6 +81,7 @@ const DESCRIBE: &str = r#"{
       "metric": { "type": "string", "description": "snr | sinad | thd | sfdr" },
       "harmonics": { "type": "string", "description": "harmonic orders to account for, e.g. 2,3,4,5" },
       "clip": { "type": "string", "description": "treat |sample| >= this as clipped and refuse" },
+      "application": { "type": "string", "description": "generic | adc | dac | recorder — decides which standard's scope the result may name" },
       "target": { "type": "string", "description": "pass/fail threshold in dB" },
       "out": { "type": "string", "description": "write the report to FILE instead of stdout" }
     }
@@ -169,6 +177,14 @@ fn main() {
         t.parse::<f64>()
             .unwrap_or_else(|_| die(&format!("--target {t:?} is not a number")))
     });
+    let application = opt(&args, "--application")
+        .map(|s| {
+            Application::parse(&s).unwrap_or_else(|| {
+                eprintln!("error: unknown --application {s:?} (generic|adc|dac|recorder)\n{USAGE}");
+                exit(2)
+            })
+        })
+        .unwrap_or(Application::Generic);
     let metric_s = opt(&args, "--metric").unwrap_or_else(|| {
         eprintln!("error: --metric is required\n{USAGE}");
         exit(2)
@@ -223,9 +239,9 @@ fn main() {
                     let (met, verdict) = met_json(target, m.db, higher_is_better);
                     events::done(metric.as_str(), verdict, &format!("{:.4} dB", m.db));
                     let body = if json {
-                        with_report_path(&render_json(&m, &met), out.as_deref())
+                        with_report_path(&render_json(&m, &met, application), out.as_deref())
                     } else {
-                        render_text(&m, target)
+                        render_text(&m, target, application)
                     };
                     write_out(&body, out.as_deref(), json);
                     if verdict == "fail" && args.iter().any(|a| a == "--fail-on-violation") {
@@ -279,9 +295,9 @@ fn main() {
                         &format!("{:.6} {}", m.value, m.unit),
                     );
                     let body = if json {
-                        with_report_path(&render_ac_json(&m, &met), out.as_deref())
+                        with_report_path(&render_ac_json(&m, &met, application), out.as_deref())
                     } else {
-                        render_ac_text(&m, target)
+                        render_ac_text(&m, target, application)
                     };
                     write_out(&body, out.as_deref(), json);
                 }
@@ -313,7 +329,24 @@ fn jstr(s: &str) -> String {
     format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
-fn render_json(m: &spectral::Measurement, met: &str) -> String {
+/// The alignment claim, as JSON. Emitted on every result so a number can never travel without
+/// the statement of how much it is claiming.
+fn alignment_json(app: Application) -> String {
+    let a = app.alignment();
+    let edition = match a.edition() {
+        Some(e) => jstr(e),
+        None => "null".into(),
+    };
+    format!(
+        "{{\"level\": {}, \"edition\": {}, \"application\": {}, \"statement\": {}}}",
+        jstr(a.level()),
+        edition,
+        jstr(app.as_str()),
+        jstr(&a.statement())
+    )
+}
+
+fn render_json(m: &spectral::Measurement, met: &str, app: Application) -> String {
     let hb: Vec<String> = m
         .harmonic_bins
         .iter()
@@ -323,7 +356,8 @@ fn render_json(m: &spectral::Measurement, met: &str) -> String {
         "{{\n  \"metric\": {},\n  \"db\": {:.6},\n  \"met\": {},\n  \"n\": {},\n  \
          \"fundamental_bin\": {},\n  \"harmonics\": [{}],\n  \"spur_bin\": {},\n  \
          \"p_f\": {:.12},\n  \"p_h\": {:.12},\n  \"p_n\": {:.12},\n  \"p_r\": {:.12},\n  \
-         \"p_s\": {:.12},\n  \"method\": \"vyges-coherent-single-tone/1\"\n}}\n",
+         \"p_s\": {:.12},\n  \"method\": \"vyges-coherent-single-tone/1\",\n  \
+         \"alignment\": {}\n}}\n",
         jstr(m.metric.as_str()),
         m.db,
         met,
@@ -335,11 +369,12 @@ fn render_json(m: &spectral::Measurement, met: &str) -> String {
         m.p_h,
         m.p_n,
         m.p_r,
-        m.p_s
+        m.p_s,
+        alignment_json(app)
     )
 }
 
-fn render_text(m: &spectral::Measurement, target: Option<f64>) -> String {
+fn render_text(m: &spectral::Measurement, target: Option<f64>, app: Application) -> String {
     let mut s = format!("vyges-meas — {} = {:.4} dB\n", m.metric.as_str(), m.db);
     s.push_str(&format!(
         "  record    {} samples, fundamental on bin {}\n",
@@ -369,26 +404,28 @@ fn render_text(m: &spectral::Measurement, target: Option<f64>) -> String {
             if ok { "MET" } else { "NOT MET" }
         ));
     }
-    s.push_str("\n  method: vyges-coherent-single-tone/1 (not an IEEE conformance claim)\n");
+    s.push_str("\n  method:    vyges-coherent-single-tone/1\n");
+    s.push_str(&format!("  alignment: {}\n", app.alignment().statement()));
     s
 }
 
-fn render_ac_json(m: &transfer::AcMeasurement, met: &str) -> String {
+fn render_ac_json(m: &transfer::AcMeasurement, met: &str, app: Application) -> String {
     format!(
         "{{\n  \"metric\": {},\n  \"value\": {:.9},\n  \"unit\": {},\n  \"met\": {},\n  \
          \"points\": {},\n  \"peak_db\": {:.6},\n  \"peak_hz\": {:.6},\n  \
-         \"method\": \"vyges-ac-transfer/1\"\n}}\n",
+         \"method\": \"vyges-ac-transfer/1\",\n  \"alignment\": {}\n}}\n",
         jstr(m.metric.as_str()),
         m.value,
         jstr(m.unit),
         met,
         m.points,
         m.peak_db,
-        m.peak_hz
+        m.peak_hz,
+        alignment_json(app)
     )
 }
 
-fn render_ac_text(m: &transfer::AcMeasurement, target: Option<f64>) -> String {
+fn render_ac_text(m: &transfer::AcMeasurement, target: Option<f64>, app: Application) -> String {
     let mut s = format!(
         "vyges-meas — {} = {:.6} {}\n",
         m.metric.as_str(),
@@ -406,6 +443,7 @@ fn render_ac_text(m: &transfer::AcMeasurement, target: Option<f64>) -> String {
             if m.value >= t { "MET" } else { "NOT MET" }
         ));
     }
-    s.push_str("\n  method: vyges-ac-transfer/1\n");
+    s.push_str("\n  method:    vyges-ac-transfer/1\n");
+    s.push_str(&format!("  alignment: {}\n", app.alignment().statement()));
     s
 }

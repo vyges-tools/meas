@@ -286,3 +286,35 @@ fn the_partitions_are_consistent() {
         m.p_f
     );
 }
+
+/// The demo's answer is arithmetic anyone can check: a 3rd harmonic at 1% of the fundamental
+/// is 20·log10(0.01) = -40 dB exactly. Pinning it means the demo cannot quietly start
+/// reporting something plausible-but-wrong, which is the failure mode of a demo nobody
+/// verifies because it "looks fine".
+#[test]
+fn the_demo_tone_measures_its_known_thd() {
+    const N: usize = 256;
+    const BIN: usize = 8;
+    let series: Vec<f64> = (0..N)
+        .map(|i| {
+            let t = i as f64 / N as f64;
+            let w = 2.0 * std::f64::consts::PI * BIN as f64 * t;
+            w.sin() + 0.01 * (3.0 * w).sin()
+        })
+        .collect();
+    let m = vyges_meas::spectral::measure(
+        &series,
+        &vyges_meas::spectral::Spec {
+            fundamental_bin: BIN,
+            harmonics: vec![2, 3, 4, 5],
+            clip_level: None,
+            metric: vyges_meas::spectral::Metric::Thd,
+        },
+    )
+    .expect("the demo capture is coherent and measurable");
+    assert!(
+        (m.db - (-40.0)).abs() < 1e-6,
+        "a harmonic at 1% of the fundamental is -40 dB THD, got {}",
+        m.db
+    );
+}

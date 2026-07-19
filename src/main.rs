@@ -21,6 +21,7 @@ usage:
                              [--harmonics 2,3,4,5] [--clip LEVEL] [--target DB]
   vyges-meas transfer SWEEP  --metric gain|bandwidth|unity-frequency|phase-margin
                              [--target VALUE]
+  vyges-meas demo            measure a synthesized coherent tone (no input files)
 
 SERIES is one sample per line, in capture order. The record must be a power of two
 between 8 and 65536 samples and must be COHERENTLY sampled: the fundamental has to
@@ -155,6 +156,53 @@ fn met_json(target: Option<f64>, value: f64, higher_is_better: bool) -> (String,
     }
 }
 
+/// A self-contained measurement over a synthesized capture — no input files.
+///
+/// The suite convention: every engine can be run with no arguments and produce a real result,
+/// which is what a smoke test and a first-time user both need. The series is generated here
+/// rather than bundled so the demo cannot drift from the kernel it exercises.
+///
+/// A coherent 8-bin tone in a 256-sample record with a deliberate 3rd harmonic at 1% of the
+/// fundamental. Coherent by construction (the tone lands exactly on bin 8), so the rectangular
+/// window is exact -- the same condition the kernel refuses inputs for lacking.
+fn run_demo(json: bool) {
+    const N: usize = 256;
+    const BIN: usize = 8;
+    let series: Vec<f64> = (0..N)
+        .map(|i| {
+            let t = i as f64 / N as f64;
+            let w = 2.0 * std::f64::consts::PI * BIN as f64 * t;
+            w.sin() + 0.01 * (3.0 * w).sin()
+        })
+        .collect();
+    let spec = spectral::Spec {
+        fundamental_bin: BIN,
+        harmonics: vec![2, 3, 4, 5],
+        clip_level: None,
+        metric: spectral::Metric::Thd,
+    };
+    match spectral::measure(&series, &spec) {
+        Ok(m) => {
+            if json {
+                println!(
+                    "{{\"demo\":true,\"metric\":\"{}\",\"db\":{:.6},\"n\":{},\"fundamental_bin\":{},\"alignment\":\"{}\"}}",
+                    m.metric.as_str(),
+                    m.db,
+                    m.n,
+                    m.fundamental_bin,
+                    Application::Generic.alignment().level()
+                );
+            } else {
+                println!("vyges-meas demo — synthesized coherent tone");
+                println!("  {N} samples, fundamental bin {BIN}, 3rd harmonic at 1% of fundamental");
+                println!("  {} = {:.4} dB", m.metric.as_str(), m.db);
+                println!("  {}", Application::Generic.alignment().statement());
+            }
+        }
+        Err(r) => die(&format!("demo measurement refused: {r}")),
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.iter().any(|a| a == "--describe") {
@@ -172,6 +220,15 @@ fn main() {
     }
 
     let json = args.iter().any(|a| a == "--json");
+
+    // `demo` runs before the required-argument checks below: it supplies its own inputs, so
+    // demanding --metric from it would make the one command that needs no arguments the only
+    // one that cannot be run without them.
+    if args[0] == "demo" {
+        run_demo(json);
+        return;
+    }
+
     let out = opt(&args, "-o");
     let target = opt(&args, "--target").map(|t| {
         t.parse::<f64>()

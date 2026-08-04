@@ -54,6 +54,7 @@ flags:
 ";
 
 const DESCRIBE: &str = r#"{
+  "schema": "vyges-tool-descriptor/1.1",
   "name": "meas",
   "summary": "closed measurement kernels (coherent single-tone spectral, AC transfer)",
   "maturity": "structured",

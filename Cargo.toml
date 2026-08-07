@@ -1,6 +1,6 @@
 [package]
 name = "vyges-meas"
-version = "0.1.28"
+version = "0.1.29"
 edition = "2021"
 description = "Closed measurement kernels: coherent single-tone spectral metrics (SNR/SINAD/THD/SFDR) and AC transfer metrics (gain, bandwidth, unity frequency, phase margin)."
 license = "Apache-2.0"

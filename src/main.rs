@@ -14,14 +14,14 @@ use vyges_meas::transfer::{self, AcMetric};
 use vyges_meas::{events, job};
 
 const USAGE: &str = "\
-vyges-meas — closed measurement kernels (coherent single-tone spectral, AC transfer)
+vyges loom meas — closed measurement kernels (coherent single-tone spectral, AC transfer)
 
 usage:
-  vyges-meas spectral SERIES --fundamental-bin N --metric snr|sinad|thd|sfdr
-                             [--harmonics 2,3,4,5] [--clip LEVEL] [--target DB]
-  vyges-meas transfer SWEEP  --metric gain|bandwidth|unity-frequency|phase-margin
-                             [--target VALUE]
-  vyges-meas demo            measure a synthesized coherent tone (no input files)
+  vyges loom meas spectral SERIES --fundamental-bin N --metric snr|sinad|thd|sfdr
+                                  [--harmonics 2,3,4,5] [--clip LEVEL] [--target DB]
+  vyges loom meas transfer SWEEP  --metric gain|bandwidth|unity-frequency|phase-margin
+                                  [--target VALUE]
+  vyges loom meas demo            measure a synthesized coherent tone (no input files)
 
 SERIES is one sample per line, in capture order. The record must be a power of two
 between 8 and 65536 samples and must be COHERENTLY sampled: the fundamental has to

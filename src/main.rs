@@ -13,6 +13,27 @@ use vyges_meas::spectral::{self, Metric, Spec};
 use vyges_meas::transfer::{self, AcMetric};
 use vyges_meas::{events, job};
 
+/// A diagnostic as a structured event (`MEAS-ERROR`, or `MEAS-WARNING` for a warning; `vyges-events/1.0`)
+/// instead of a bare stderr line; text after a blank line (the usage) stays plain help.
+fn diag_line(msg: String) {
+    let (head, help) = match msg.split_once("\n\n") {
+        Some((h, rest)) => (h.to_string(), Some(rest.to_string())),
+        None => (msg, None),
+    };
+    let warn = head.starts_with("warning: ");
+    let text = head.strip_prefix("error: ").or_else(|| head.strip_prefix("warning: ")).unwrap_or(&head).to_string();
+    let (severity, code) = if warn { (vyges_events::Severity::Warn, "MEAS-WARNING") } else { (vyges_events::Severity::Error, "MEAS-ERROR") };
+    vyges_events::emit(&vyges_events::Event::new("vyges-meas", severity, text).with_code(code));
+    if let Some(h) = help {
+        eprintln!("{h}");
+    }
+}
+
+macro_rules! diag {
+    ($($t:tt)*) => { diag_line(format!($($t)*)) };
+}
+
+
 const USAGE: &str = "\
 vyges loom meas — closed measurement kernels (coherent single-tone spectral, AC transfer)
 
@@ -105,7 +126,7 @@ fn opt(args: &[String], name: &str) -> Option<String> {
 }
 
 fn die(msg: &str) -> ! {
-    eprintln!("error: {msg}");
+    diag!("error: {msg}");
     exit(1)
 }
 
@@ -238,13 +259,13 @@ fn main() {
     let application = opt(&args, "--application")
         .map(|s| {
             Application::parse(&s).unwrap_or_else(|| {
-                eprintln!("error: unknown --application {s:?} (generic|adc|dac|recorder)\n{USAGE}");
+                diag!("error: unknown --application {s:?} (generic|adc|dac|recorder)\n{USAGE}");
                 exit(2)
             })
         })
         .unwrap_or(Application::Generic);
     let metric_s = opt(&args, "--metric").unwrap_or_else(|| {
-        eprintln!("error: --metric is required\n{USAGE}");
+        diag!("error: --metric is required\n{USAGE}");
         exit(2)
     });
 
@@ -254,16 +275,16 @@ fn main() {
                 .get(1)
                 .filter(|a| !a.starts_with('-'))
                 .unwrap_or_else(|| {
-                    eprintln!("error: `spectral` needs a SERIES path\n{USAGE}");
+                    diag!("error: `spectral` needs a SERIES path\n{USAGE}");
                     exit(2)
                 });
             let metric = Metric::parse(&metric_s).unwrap_or_else(|| {
-                eprintln!("error: unknown --metric {metric_s:?}\n{USAGE}");
+                diag!("error: unknown --metric {metric_s:?}\n{USAGE}");
                 exit(2)
             });
             let bin: usize = opt(&args, "--fundamental-bin")
                 .unwrap_or_else(|| {
-                    eprintln!("error: --fundamental-bin is required\n{USAGE}");
+                    diag!("error: --fundamental-bin is required\n{USAGE}");
                     exit(2)
                 })
                 .parse()
@@ -333,11 +354,11 @@ fn main() {
                 .get(1)
                 .filter(|a| !a.starts_with('-'))
                 .unwrap_or_else(|| {
-                    eprintln!("error: `transfer` needs a SWEEP path\n{USAGE}");
+                    diag!("error: `transfer` needs a SWEEP path\n{USAGE}");
                     exit(2)
                 });
             let metric = AcMetric::parse(&metric_s).unwrap_or_else(|| {
-                eprintln!("error: unknown --metric {metric_s:?}\n{USAGE}");
+                diag!("error: unknown --metric {metric_s:?}\n{USAGE}");
                 exit(2)
             });
             let text =
@@ -377,7 +398,7 @@ fn main() {
             }
         }
         other => {
-            eprintln!("error: unknown command {other:?}\n{USAGE}");
+            diag!("error: unknown command {other:?}\n{USAGE}");
             exit(2);
         }
     }

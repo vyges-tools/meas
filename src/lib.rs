@@ -28,6 +28,10 @@
 //! rungs of that ladder can only be built from a recorded crosswalk — so a stronger claim than
 //! the evidence supports has no constructor, let alone a default.
 
+// The crate's own name inside it: the command-line entry ([`cli_main`]) is built into the
+// library too, and its `vyges_meas::…` paths resolve here.
+extern crate self as vyges_meas;
+
 pub mod alignment;
 pub mod events;
 pub mod job;
@@ -36,3 +40,10 @@ pub mod transfer;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const COPYRIGHT: &str = "Copyright (c) 2026 Vyges — Apache-2.0";
+
+/// The `vyges-meas` command-line entry (the binary's `main`), built into the library too so a
+/// suite binary can link every engine and run the one it is invoked as.
+#[cfg(feature = "suite")]
+#[doc(hidden)]
+#[path = "main.rs"]
+pub mod cli_main;

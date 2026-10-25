@@ -10,6 +10,11 @@ repository = "https://github.com/vyges-tools/meas"
 
 # No third-party deps — the DFT and the metric arithmetic are std-only, so a result
 # depends on nothing that could change underneath it between releases.
+[features]
+# The command-line entry built into the library too (`cli_main`), for the suite binaries
+# that link every engine and run the one they are invoked as.
+suite = []
+
 [dependencies]
 vyges-events = { git = "https://github.com/vyges-tools/events", branch = "main", default-features = false }
 

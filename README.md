@@ -1,7 +1,5 @@
 # vyges-meas
 
-**[Download Loom](https://vyges.com/products/vyges-cli/#install)** · install the free [Vyges CLI](https://vyges.com/products/vyges-cli/), then `vyges install loom`
-
 **Closed measurement kernels for analog characterization** — coherent single-tone spectral
 metrics (SNR, SINAD, THD, SFDR) and AC transfer metrics (gain, bandwidth, unity-gain frequency,
 phase margin).
